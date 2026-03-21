@@ -1,18 +1,13 @@
 {
   "name": "clipai-backend",
   "version": "1.0.0",
-  "description": "",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "build": "pip install yt-dlp && apt-get install -y ffmpeg || true"
+    "build": "npm install && curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp && chmod a+rx /usr/local/bin/yt-dlp"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "cors": "^2.8.6",
-    "express": "^5.2.1"
+    "express": "^4.18.2",
+    "cors": "^2.8.5"
   }
 }
