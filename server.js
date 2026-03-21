@@ -3,7 +3,7 @@ const cors = require('cors');
 const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
-const YTDLP = 'yt-dlp';
+const YTDLP = '/usr/local/bin/yt-dlp';
 const app = express();
 
 app.use(cors());
