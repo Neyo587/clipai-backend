@@ -1,0 +1,1074 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Clipai Downloader — YouTube to MP3 & MP4</title>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #080b10;
+      --surface: #0f1319;
+      --surface2: #161c26;
+      --border: rgba(255,255,255,0.07);
+      --accent: #00e5ff;
+      --accent2: #7c3aed;
+      --red: #ff3b57;
+      --green: #00d68f;
+      --text: #f0f4ff;
+      --muted: #6b7a99;
+      --glow: 0 0 40px rgba(0,229,255,0.15);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Animated background grid */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Glowing orbs */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+    }
+    .orb-1 {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(0,229,255,0.08), transparent 70%);
+      top: -150px; left: -150px;
+      animation: drift1 20s ease-in-out infinite;
+    }
+    .orb-2 {
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(124,58,237,0.1), transparent 70%);
+      bottom: -100px; right: -100px;
+      animation: drift2 25s ease-in-out infinite;
+    }
+    @keyframes drift1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(80px,60px)} }
+    @keyframes drift2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-60px,-80px)} }
+
+    /* ---- HEADER ---- */
+    header {
+      position: relative;
+      z-index: 10;
+      padding: 20px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(16px);
+      background: rgba(8,11,16,0.7);
+      position: sticky;
+      top: 0;
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      text-decoration: none;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+    }
+    .logo-text {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.25rem;
+      color: var(--text);
+      letter-spacing: -0.5px;
+    }
+    .logo-text span { color: var(--accent); }
+
+    nav { display: flex; gap: 8px; align-items: center; }
+    nav a {
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 0.875rem;
+      padding: 8px 16px;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    nav a:hover { color: var(--text); background: var(--surface2); }
+
+    /* ---- HERO ---- */
+    .hero {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 80px 24px 40px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0,229,255,0.08);
+      border: 1px solid rgba(0,229,255,0.2);
+      color: var(--accent);
+      font-size: 0.75rem;
+      font-weight: 500;
+      padding: 6px 14px;
+      border-radius: 100px;
+      margin-bottom: 28px;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .badge-dot {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+
+    h1 {
+      font-family: 'Syne', sans-serif;
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -1.5px;
+      margin-bottom: 18px;
+      background: linear-gradient(135deg, #fff 30%, rgba(255,255,255,0.5));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    h1 em {
+      font-style: normal;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 1.1rem;
+      max-width: 500px;
+      margin: 0 auto 48px;
+      line-height: 1.6;
+    }
+
+    /* ---- CONVERTER CARD ---- */
+    .converter-card {
+      position: relative;
+      z-index: 1;
+      max-width: 720px;
+      margin: 0 auto 32px;
+      padding: 0 24px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 32px;
+      box-shadow: var(--glow), 0 40px 80px rgba(0,0,0,0.4);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+
+    /* Format toggle */
+    .format-toggle {
+      display: flex;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 4px;
+      margin-bottom: 20px;
+      width: fit-content;
+    }
+    .fmt-btn {
+      padding: 10px 32px;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.9rem;
+      letter-spacing: 0.5px;
+      transition: all 0.25s;
+      color: var(--muted);
+      background: transparent;
+    }
+    .fmt-btn.active {
+      background: linear-gradient(135deg, var(--accent), #00b4cc);
+      color: #000;
+      box-shadow: 0 4px 20px rgba(0,229,255,0.3);
+    }
+
+    /* URL input row */
+    .input-row {
+      display: flex;
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .url-input-wrapper {
+      flex: 1;
+      position: relative;
+    }
+    .url-icon {
+      position: absolute;
+      left: 16px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--muted);
+      font-size: 1.1rem;
+      pointer-events: none;
+    }
+    #url-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px 16px 16px 44px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.95rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    #url-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,229,255,0.1);
+    }
+    #url-input::placeholder { color: var(--muted); }
+
+    .convert-btn {
+      background: linear-gradient(135deg, var(--accent), #00b4cc);
+      color: #000;
+      border: none;
+      border-radius: 14px;
+      padding: 16px 28px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.25s;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .convert-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,229,255,0.35);
+    }
+    .convert-btn:active { transform: translateY(0); }
+    .convert-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Quality options */
+    .quality-row {
+      margin-top: 18px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .quality-chip {
+      padding: 6px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.8rem;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+    .quality-chip.selected {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(0,229,255,0.08);
+    }
+
+    /* Result area */
+    #result-area {
+      display: none;
+      margin-top: 28px;
+      padding-top: 28px;
+      border-top: 1px solid var(--border);
+    }
+
+    .video-preview {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+    .thumb-wrap {
+      width: 120px;
+      height: 68px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface2);
+      flex-shrink: 0;
+      position: relative;
+    }
+    .thumb-wrap img {
+      width: 100%; height: 100%;
+      object-fit: cover;
+    }
+    .thumb-placeholder {
+      width: 100%; height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 1.5rem;
+    }
+    .video-meta { flex: 1; }
+    .video-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 4px;
+      line-height: 1.3;
+    }
+    .video-info {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    /* Progress bar */
+    .progress-wrap {
+      background: var(--surface2);
+      border-radius: 100px;
+      height: 6px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .progress-bar {
+      height: 100%;
+      border-radius: 100px;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+    .progress-label {
+      font-size: 0.8rem;
+      color: var(--muted);
+      text-align: right;
+    }
+
+    /* Download button */
+    .download-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      width: 100%;
+      margin-top: 20px;
+      padding: 16px;
+      background: linear-gradient(135deg, var(--green), #00a870);
+      color: #000;
+      border: none;
+      border-radius: 14px;
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: all 0.25s;
+      text-decoration: none;
+    }
+    .download-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(0,214,143,0.35);
+    }
+
+    /* Status message */
+    #status-msg {
+      text-align: center;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      margin-top: 12px;
+      display: none;
+    }
+    #status-msg.error {
+      background: rgba(255,59,87,0.1);
+      border: 1px solid rgba(255,59,87,0.3);
+      color: var(--red);
+      display: block;
+    }
+    #status-msg.info {
+      background: rgba(0,229,255,0.08);
+      border: 1px solid rgba(0,229,255,0.2);
+      color: var(--accent);
+      display: block;
+    }
+    #status-msg.success {
+      background: rgba(0,214,143,0.08);
+      border: 1px solid rgba(0,214,143,0.2);
+      color: var(--green);
+      display: block;
+    }
+
+    /* ---- FEATURES ---- */
+    .features {
+      position: relative;
+      z-index: 1;
+      max-width: 960px;
+      margin: 60px auto;
+      padding: 0 24px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+    }
+
+    .feature-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      transition: border-color 0.2s, transform 0.2s;
+    }
+    .feature-card:hover {
+      border-color: rgba(0,229,255,0.3);
+      transform: translateY(-3px);
+    }
+    .feature-icon {
+      width: 44px; height: 44px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      margin-bottom: 14px;
+    }
+    .feature-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+    }
+    .feature-desc {
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.6;
+    }
+
+    /* ---- HOW IT WORKS ---- */
+    .how-section {
+      position: relative;
+      z-index: 1;
+      max-width: 960px;
+      margin: 0 auto 80px;
+      padding: 0 24px;
+      text-align: center;
+    }
+    .section-title {
+      font-family: 'Syne', sans-serif;
+      font-size: 1.8rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .section-sub {
+      color: var(--muted);
+      margin-bottom: 40px;
+      font-size: 0.95rem;
+    }
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 24px;
+    }
+    .step {
+      position: relative;
+    }
+    .step-num {
+      width: 48px; height: 48px;
+      border-radius: 14px;
+      background: linear-gradient(135deg, rgba(0,229,255,0.15), rgba(124,58,237,0.15));
+      border: 1px solid rgba(0,229,255,0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      color: var(--accent);
+      margin: 0 auto 16px;
+    }
+    .step-title {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .step-desc { color: var(--muted); font-size: 0.85rem; line-height: 1.6; }
+
+    /* ---- FAQ ---- */
+    .faq-section {
+      position: relative;
+      z-index: 1;
+      max-width: 700px;
+      margin: 0 auto 80px;
+      padding: 0 24px;
+    }
+    .faq-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      margin-bottom: 10px;
+      overflow: hidden;
+    }
+    .faq-q {
+      padding: 18px 20px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: 500;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+    .faq-q:hover { color: var(--accent); }
+    .faq-icon {
+      color: var(--muted);
+      font-size: 1.2rem;
+      transition: transform 0.2s;
+    }
+    .faq-a {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease, padding 0.3s;
+      color: var(--muted);
+      font-size: 0.875rem;
+      line-height: 1.7;
+      padding: 0 20px;
+    }
+    .faq-item.open .faq-a { max-height: 200px; padding: 0 20px 18px; }
+    .faq-item.open .faq-icon { transform: rotate(45deg); }
+
+    /* ---- FOOTER ---- */
+    footer {
+      position: relative;
+      z-index: 1;
+      border-top: 1px solid var(--border);
+      padding: 32px 24px;
+      text-align: center;
+    }
+    .footer-logo {
+      font-family: 'Syne', sans-serif;
+      font-weight: 800;
+      font-size: 1.1rem;
+      margin-bottom: 8px;
+    }
+    .footer-logo span { color: var(--accent); }
+    footer p {
+      color: var(--muted);
+      font-size: 0.8rem;
+      line-height: 1.7;
+    }
+
+    /* ---- RESPONSIVE ---- */
+    @media (max-width: 600px) {
+      header { padding: 16px; }
+      nav a { display: none; }
+      .input-row { flex-direction: column; }
+      .convert-btn { width: 100%; justify-content: center; }
+      .card { padding: 20px; }
+      .video-preview { flex-direction: column; text-align: center; }
+      .thumb-wrap { width: 100%; height: 160px; }
+    }
+
+    /* Spinner */
+    .spinner {
+      width: 18px; height: 18px;
+      border: 2px solid rgba(0,0,0,0.2);
+      border-top-color: #000;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+      display: none;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Fade-in animation */
+    .fade-in { animation: fadeIn 0.4s ease forwards; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+  </style>
+</head>
+<body>
+
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+
+  <!-- HEADER -->
+  <header>
+    <a href="#" class="logo">
+      <div class="logo-icon">⚡</div>
+      <span class="logo-text">Clip<span>ai</span></span>
+    </a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+  </header>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="badge"><span class="badge-dot"></span> Free • No sign-up • Unlimited</div>
+    <h1>Download YouTube<br>as <em>MP3 or MP4</em></h1>
+    <p class="subtitle">Paste any YouTube link and get your file in seconds. No limits, no ads, no account needed.</p>
+  </section>
+
+  <!-- CONVERTER -->
+  <div class="converter-card">
+    <div class="card">
+      <!-- Format toggle -->
+      <div class="format-toggle">
+        <button class="fmt-btn active" data-fmt="mp3" onclick="selectFormat(this)">🎵 MP3</button>
+        <button class="fmt-btn" data-fmt="mp4" onclick="selectFormat(this)">🎬 MP4</button>
+      </div>
+
+      <!-- URL Input -->
+      <div class="input-row">
+        <div class="url-input-wrapper">
+          <span class="url-icon">🔗</span>
+          <input
+            id="url-input"
+            type="text"
+            placeholder="https://www.youtube.com/watch?v=..."
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <button class="convert-btn" id="convert-btn" onclick="startConvert()">
+          <div class="spinner" id="spinner"></div>
+          <span id="btn-text">Convert</span>
+        </button>
+      </div>
+
+      <!-- Quality chips -->
+      <div class="quality-row" id="quality-row">
+        <!-- populated by JS -->
+      </div>
+
+      <!-- Status message -->
+      <div id="status-msg"></div>
+
+      <!-- Result area -->
+      <div id="result-area" class="fade-in">
+        <div class="video-preview">
+          <div class="thumb-wrap">
+            <img id="thumb-img" src="" alt="" style="display:none">
+            <div class="thumb-placeholder" id="thumb-placeholder">🎬</div>
+          </div>
+          <div class="video-meta">
+            <div class="video-title" id="video-title">Processing...</div>
+            <div class="video-info" id="video-info">Please wait</div>
+          </div>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+        <div class="progress-label" id="progress-label">0%</div>
+
+        <a id="download-link" class="download-btn" href="#" style="display:none">
+          ⬇️ Download File
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEATURES -->
+  <div class="features">
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(0,229,255,0.1)">⚡</div>
+      <div class="feature-title">Lightning Fast</div>
+      <div class="feature-desc">Powered by yt-dlp, the most capable open-source YouTube downloader available.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(124,58,237,0.1)">🎯</div>
+      <div class="feature-title">Any Length</div>
+      <div class="feature-desc">No artificial time caps. Download full concerts, 8-hour podcasts, or short clips.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(0,214,143,0.1)">🔒</div>
+      <div class="feature-title">No Account Needed</div>
+      <div class="feature-desc">Zero sign-up, zero tracking, zero ads. Just paste, convert, download.</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon" style="background:rgba(255,59,87,0.1)">🎛️</div>
+      <div class="feature-title">Quality Control</div>
+      <div class="feature-desc">Choose your preferred bitrate for MP3 (128–320kbps) or resolution for MP4.</div>
+    </div>
+  </div>
+
+  <!-- HOW IT WORKS -->
+  <section class="how-section" id="how">
+    <div class="section-title">How it works</div>
+    <div class="section-sub">Three steps, done in seconds</div>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-title">Paste the link</div>
+        <div class="step-desc">Copy any YouTube URL — videos, Shorts, or full lectures — and paste it above.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-title">Choose format</div>
+        <div class="step-desc">Pick MP3 for audio or MP4 for video, then select your preferred quality.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-title">Download</div>
+        <div class="step-desc">Hit Convert and download your file. It's that simple — no waiting rooms.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="faq-section" id="faq">
+    <div class="section-title" style="text-align:center;margin-bottom:8px">FAQ</div>
+    <div class="section-sub" style="text-align:center">Common questions answered</div>
+    <div id="faq-list"></div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-logo">Clip<span>ai</span> Downloader</div>
+    <p>For personal use only. Respect copyright and YouTube's Terms of Service.<br>
+    Built with ❤️ using yt-dlp + FFmpeg.</p>
+  </footer>
+
+  <script>
+    // -------------------------------------------------------
+    //  STATE
+    // -------------------------------------------------------
+    let selectedFormat = 'mp3';
+    let selectedQuality = null;
+
+    const qualities = {
+      mp3: ['128 kbps', '192 kbps', '256 kbps', '320 kbps'],
+      mp4: ['480p', '720p', '1080p', '4K']
+    };
+
+    // -------------------------------------------------------
+    //  FORMAT TOGGLE
+    // -------------------------------------------------------
+    function selectFormat(btn) {
+      document.querySelectorAll('.fmt-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedFormat = btn.dataset.fmt;
+      selectedQuality = null;
+      renderQuality();
+      resetResult();
+    }
+
+    function renderQuality() {
+      const row = document.getElementById('quality-row');
+      row.innerHTML = '';
+      qualities[selectedFormat].forEach((q, i) => {
+        const chip = document.createElement('div');
+        chip.className = 'quality-chip' + (i === 1 ? ' selected' : '');
+        chip.textContent = q;
+        chip.onclick = () => {
+          row.querySelectorAll('.quality-chip').forEach(c => c.classList.remove('selected'));
+          chip.classList.add('selected');
+          selectedQuality = q;
+        };
+        if (i === 1) selectedQuality = q; // default: 192kbps / 720p
+        row.appendChild(chip);
+      });
+    }
+
+    // -------------------------------------------------------
+    //  VALIDATE URL
+    // -------------------------------------------------------
+    function isValidYouTubeUrl(url) {
+      return /^(https?:\/\/)?(www\.)?(youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)[\w-]+/.test(url.trim());
+    }
+
+    // -------------------------------------------------------
+    //  MAIN CONVERT FUNCTION
+    //  NOTE: This calls your backend API at http://localhost:3000/api/convert
+    //  Replace with your actual backend URL when deployed
+    // -------------------------------------------------------
+    async function startConvert() {
+      const url = document.getElementById('url-input').value.trim();
+
+      if (!url) {
+        showStatus('Please paste a YouTube URL first.', 'error');
+        return;
+      }
+      if (!isValidYouTubeUrl(url)) {
+        showStatus('That doesn\'t look like a valid YouTube link. Try: youtube.com/watch?v=...', 'error');
+        return;
+      }
+
+      setLoading(true);
+      resetResult();
+      showStatus('Fetching video info...', 'info');
+
+      try {
+        // ---- CALL YOUR BACKEND HERE ----
+        // Your backend should accept POST http://localhost:3000/api/convert with { url, format, quality }
+        // and return { title, thumbnail, downloadUrl, duration }
+        //
+        // Example backend (Node.js/Express + yt-dlp):
+        //   app.post('http://localhost:3000/api/convert', async (req, res) => {
+        //     const { url, format, quality } = req.body;
+        //     // run yt-dlp with format/quality flags
+        //     // return download link
+        //   });
+        //
+        // FREE HOSTING OPTIONS:
+        //   - Render.com (free tier, perfect for Node.js/Python)
+        //   - Railway.app (500 hrs/month free)
+        //   - Glitch.com (always free, small projects)
+        //   - Your own PC with ngrok (for testing)
+
+        const response = await fetch('http://localhost:3000/api/convert', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url,
+            format: selectedFormat,
+            quality: selectedQuality
+          })
+        });
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.message || 'Conversion failed. Try another video.');
+        }
+
+        const data = await response.json();
+        // data = { title, thumbnail, downloadUrl, duration }
+
+        showResult(data);
+        showStatus('Ready to download!', 'success');
+
+      } catch (err) {
+        // If backend not yet set up, show a helpful demo message
+        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+          simulateDemo(url);
+        } else {
+          showStatus(err.message, 'error');
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    // -------------------------------------------------------
+    //  DEMO MODE (runs when backend is not connected)
+    // -------------------------------------------------------
+    function simulateDemo(url) {
+      showStatus('⚙️ Backend not connected yet — showing demo. Deploy your backend to activate.', 'info');
+
+      // Extract video ID to show real thumbnail
+      const match = url.match(/(?:v=|youtu\.be\/|shorts\/)([^&\n?#]+)/);
+      const videoId = match ? match[1] : null;
+
+      const demoData = {
+        title: 'Demo: Your video title will appear here',
+        thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null,
+        duration: '3:45',
+        downloadUrl: null
+      };
+
+      showResult(demoData, true);
+    }
+
+    // -------------------------------------------------------
+    //  SHOW RESULT
+    // -------------------------------------------------------
+    function showResult(data, isDemo = false) {
+      const area = document.getElementById('result-area');
+      area.style.display = 'block';
+      area.classList.add('fade-in');
+
+      document.getElementById('video-title').textContent = data.title || 'Unknown title';
+      document.getElementById('video-info').textContent =
+        `${selectedFormat.toUpperCase()} • ${selectedQuality || ''} ${data.duration ? '• ' + data.duration : ''}`;
+
+      if (data.thumbnail) {
+        const img = document.getElementById('thumb-img');
+        img.src = data.thumbnail;
+        img.style.display = 'block';
+        document.getElementById('thumb-placeholder').style.display = 'none';
+      }
+
+      // Animate progress bar
+      animateProgress(isDemo ? 0 : 100);
+
+      const dlBtn = document.getElementById('download-link');
+      if (data.downloadUrl) {
+        dlBtn.href = data.downloadUrl;
+        dlBtn.download = `${data.title || 'download'}.${selectedFormat}`;
+        dlBtn.style.display = 'flex';
+      } else if (isDemo) {
+        dlBtn.style.display = 'flex';
+        dlBtn.href = '#';
+        dlBtn.textContent = '⚙️ Deploy backend to enable downloads';
+        dlBtn.style.background = 'linear-gradient(135deg, var(--accent2), #5b21b6)';
+        dlBtn.style.color = '#fff';
+        dlBtn.onclick = e => {
+          e.preventDefault();
+          showStatus('Deploy the Node.js/Python backend to enable real downloads. See the README.', 'info');
+        };
+      }
+    }
+
+    function animateProgress(target) {
+      const bar = document.getElementById('progress-bar');
+      const label = document.getElementById('progress-label');
+      let current = 0;
+      const interval = setInterval(() => {
+        current = Math.min(current + Math.random() * 15, target || 85);
+        bar.style.width = current + '%';
+        label.textContent = Math.round(current) + '%';
+        if (current >= (target || 85)) {
+          clearInterval(interval);
+          if (target === 100) {
+            bar.style.width = '100%';
+            label.textContent = '100% — Done!';
+          }
+        }
+      }, 120);
+    }
+
+    // -------------------------------------------------------
+    //  HELPERS
+    // -------------------------------------------------------
+    function setLoading(on) {
+      const btn = document.getElementById('convert-btn');
+      const spinner = document.getElementById('spinner');
+      const text = document.getElementById('btn-text');
+      btn.disabled = on;
+      spinner.style.display = on ? 'block' : 'none';
+      text.textContent = on ? 'Converting...' : 'Convert';
+    }
+
+    function showStatus(msg, type) {
+      const el = document.getElementById('status-msg');
+      el.className = type;
+      el.textContent = msg;
+    }
+
+    function resetResult() {
+      document.getElementById('result-area').style.display = 'none';
+      document.getElementById('progress-bar').style.width = '0%';
+      document.getElementById('progress-label').textContent = '0%';
+      document.getElementById('download-link').style.display = 'none';
+      document.getElementById('thumb-img').style.display = 'none';
+      document.getElementById('thumb-placeholder').style.display = 'flex';
+      document.getElementById('status-msg').className = '';
+      document.getElementById('status-msg').textContent = '';
+    }
+
+    // Allow Enter key to trigger convert
+    document.getElementById('url-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') startConvert();
+    });
+
+    // Paste detection - auto-validate
+    document.getElementById('url-input').addEventListener('paste', e => {
+      setTimeout(() => {
+        const val = document.getElementById('url-input').value.trim();
+        if (val && !isValidYouTubeUrl(val)) {
+          showStatus('Hmm, that doesn\'t look like a YouTube URL.', 'error');
+        } else if (val) {
+          showStatus('', '');
+        }
+      }, 50);
+    });
+
+    // -------------------------------------------------------
+    //  FAQ
+    // -------------------------------------------------------
+    const faqs = [
+      {
+        q: 'Is it really free?',
+        a: 'Yes. No plans, no subscriptions, no hidden fees. The site runs on open-source tools (yt-dlp + FFmpeg) which are completely free.'
+      },
+      {
+        q: 'Is there a video length limit?',
+        a: 'No artificial cap. Download full concerts, 8-hour podcasts, or even longer — as long as the server has disk space and time, it works.'
+      },
+      {
+        q: 'What quality can I choose?',
+        a: 'For MP3: 128, 192, 256, or 320 kbps. For MP4: 480p, 720p, 1080p, or 4K (when the source video supports it).'
+      },
+      {
+        q: 'Does it work on phone?',
+        a: 'Yes — the site is fully mobile-responsive. Works on Android and iOS browsers without installing any app.'
+      },
+      {
+        q: 'Is downloading YouTube videos legal?',
+        a: 'Downloading for personal use is generally accepted in many regions, but redistributing copyrighted content is not. Always respect creators and YouTube\'s Terms of Service.'
+      },
+      {
+        q: 'What do I need to run my own version?',
+        a: 'A free server (Render.com, Railway.app, or your own PC), Node.js or Python, yt-dlp, and FFmpeg. Full setup guide is in the README.'
+      }
+    ];
+
+    const faqList = document.getElementById('faq-list');
+    faqs.forEach(({ q, a }) => {
+      const item = document.createElement('div');
+      item.className = 'faq-item';
+      item.innerHTML = `
+        <div class="faq-q" onclick="toggleFaq(this)">
+          <span>${q}</span>
+          <span class="faq-icon">+</span>
+        </div>
+        <div class="faq-a">${a}</div>
+      `;
+      faqList.appendChild(item);
+    });
+
+    function toggleFaq(btn) {
+      const item = btn.closest('.faq-item');
+      item.classList.toggle('open');
+    }
+
+    // -------------------------------------------------------
+    //  INIT
+    // -------------------------------------------------------
+    renderQuality();
+  </script>
+</body>
+</html>
