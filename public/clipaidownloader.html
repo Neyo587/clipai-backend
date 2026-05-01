@@ -842,42 +842,24 @@
       showStatus('Fetching video info...', 'info');
 
       try {
-        // ---- CALL YOUR BACKEND HERE ----
-        // Your backend should accept POST /api/convert with { url, format, quality }
-        // and return { title, thumbnail, downloadUrl, duration }
-        //
-        // Example backend (Node.js/Express + yt-dlp):
-        //   app.post('/api/convert', async (req, res) => {
-        //     const { url, format, quality } = req.body;
-        //     // run yt-dlp with format/quality flags
-        //     // return download link
-        //   });
-        //
-        // FREE HOSTING OPTIONS:
-        //   - Render.com (free tier, perfect for Node.js/Python)
-        //   - Railway.app (500 hrs/month free)
-        //   - Glitch.com (always free, small projects)
-        //   - Your own PC with ngrok (for testing)
+        const BASE = 'https://clipai-backend-production-a77f.up.railway.app';
 
-        const response = await fetch('https://clipai-backend-5cii.onrender.com/api/convert', {
+        const infoRes = await fetch(`${BASE}/api/info`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url,
-            format: selectedFormat,
-            quality: selectedQuality
-          })
+          body: JSON.stringify({ url })
         });
 
-        if (!response.ok) {
-          const err = await response.json().catch(() => ({}));
-          throw new Error(err.message || 'Conversion failed. Try another video.');
+        if (!infoRes.ok) {
+          const err = await infoRes.json().catch(() => ({}));
+          throw new Error(err.message || 'Could not fetch video info.');
         }
 
-        const data = await response.json();
-        // data = { title, thumbnail, downloadUrl, duration }
+        const info = await infoRes.json();
+        const params = new URLSearchParams({ url, format: selectedFormat, quality: selectedQuality });
+        const downloadUrl = `${BASE}/api/download?${params.toString()}`;
 
-        showResult(data);
+        showResult({ ...info, downloadUrl });
         showStatus('Ready to download!', 'success');
 
       } catch (err) {
@@ -924,9 +906,14 @@
       document.getElementById('video-info').textContent =
         `${selectedFormat.toUpperCase()} • ${selectedQuality || ''} ${data.duration ? '• ' + data.duration : ''}`;
 
-      if (data.thumbnail) {
+      // Get thumbnail from YouTube directly
+      const urlInput = document.getElementById('url-input').value;
+      const vidMatch = urlInput.match(/(?:v=|youtu\.be\/|shorts\/)([^&\n?#]+)/);
+      const vidId = vidMatch ? vidMatch[1] : null;
+      const thumbUrl = vidId ? `https://img.youtube.com/vi/${vidId}/mqdefault.jpg` : (data.thumbnail || null);
+      if (thumbUrl) {
         const img = document.getElementById('thumb-img');
-        img.src = data.thumbnail;
+        img.src = thumbUrl;
         img.style.display = 'block';
         document.getElementById('thumb-placeholder').style.display = 'none';
       }
@@ -936,8 +923,12 @@
 
       const dlBtn = document.getElementById('download-link');
       if (data.downloadUrl) {
-        dlBtn.href = data.downloadUrl;
-        dlBtn.download = `${data.title || 'download'}.${selectedFormat}`;
+        const fixedUrl = data.downloadUrl
+          .replace('http://localhost:3000', 'https://clipai-backend-production-a77f.up.railway.app')
+          .replace('https://localhost:3000', 'https://clipai-backend-production-a77f.up.railway.app');
+        dlBtn.href = fixedUrl;
+        dlBtn.target = '_blank';
+        dlBtn.innerHTML = '⬇️ Download File';
         dlBtn.style.display = 'flex';
       } else if (isDemo) {
         dlBtn.style.display = 'flex';
