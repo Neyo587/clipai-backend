@@ -842,7 +842,7 @@
       showStatus('Fetching video info...', 'info');
 
       try {
-        const BASE = 'https://clipai-backend-production-a77f.up.railway.app';
+        const BASE = 'https://clipai-backend-5cii.onrender.com';
 
         const infoRes = await fetch(`${BASE}/api/info`, {
           method: 'POST',
@@ -924,8 +924,8 @@
       const dlBtn = document.getElementById('download-link');
       if (data.downloadUrl) {
         const fixedUrl = data.downloadUrl
-          .replace('http://localhost:3000', 'https://clipai-backend-production-a77f.up.railway.app')
-          .replace('https://localhost:3000', 'https://clipai-backend-production-a77f.up.railway.app');
+          .replace('http://localhost:3000', 'https://clipai-backend-5cii.onrender.com')
+          .replace('https://localhost:3000', 'https://clipai-backend-5cii.onrender.com');
         dlBtn.href = fixedUrl;
         dlBtn.target = '_blank';
         dlBtn.innerHTML = '⬇️ Download File';
