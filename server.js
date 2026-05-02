@@ -40,7 +40,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true }
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // ─── YouTube bot bypass args ──────────────────────────────────────────────────
-const BYPASS = `--extractor-args "youtube:player_client=android_embedded,ios,android,web" --no-warnings`;
+const BYPASS = `--extractor-args "youtube:player_client=android_embedded,ios" --no-warnings`;
 
 function cookiesArg() {
   return fs.existsSync(COOKIES_FILE) ? `--cookies "${COOKIES_FILE}"` : '';
@@ -139,6 +139,24 @@ app.post('/api/info', (req, res) => {
       duration: parts[1] || '',
       thumbnail: videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null,
       videoId
+    });
+  });
+});
+
+app.get('/api/test-yt', (req, res) => {
+  const testUrl = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
+  const clients = ['android_embedded', 'ios', 'android', 'web', 'mweb', 'tv_embedded'];
+  const results = [];
+  let done = 0;
+
+  clients.forEach(client => {
+    const cmd = `"${YTDLP}" --extractor-args "youtube:player_client=${client}" --no-warnings --print "%(title)s" "${testUrl}"`;
+    exec(cmd, { timeout: 30000 }, (err, stdout, stderr) => {
+      results.push({ client, success: !err && !!stdout.trim(), output: stdout.trim() || stderr.substring(0, 100) });
+      done++;
+      if (done === clients.length) {
+        res.json(results);
+      }
     });
   });
 });
