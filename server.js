@@ -40,14 +40,18 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true }
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // ─── YouTube bot bypass args ──────────────────────────────────────────────────
-const BYPASS = `--extractor-args "youtube:player_client=android_embedded,ios" --no-warnings`;
+const BYPASS = `--extractor-args "youtube:player_client=android_embedded,ios,android" --no-warnings`;
+
+function proxyArg() {
+  return process.env.PROXY_URL ? `--proxy "${process.env.PROXY_URL}"` : '';
+}
 
 function cookiesArg() {
   return fs.existsSync(COOKIES_FILE) ? `--cookies "${COOKIES_FILE}"` : '';
 }
 
 function ytArgs() {
-  return `${BYPASS} ${cookiesArg()}`;
+  return `${BYPASS} ${cookiesArg()} ${proxyArg()}`;
 }
 
 // ─── BINARY DOWNLOADER ───────────────────────────────────────────────────────
