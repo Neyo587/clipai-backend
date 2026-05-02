@@ -78,8 +78,28 @@ function setup(callback) {
 
   // Write YouTube cookies from env if provided
   if (process.env.YT_COOKIES) {
-    fs.writeFileSync(COOKIES_FILE, process.env.YT_COOKIES);
-    console.log('✅ YouTube cookies written');
+    try {
+      const raw = process.env.YT_COOKIES.trim();
+      let cookieContent = '';
+      // Check if JSON format — convert to Netscape format
+      if (raw.startsWith('[')) {
+        const cookies = JSON.parse(raw);
+        cookieContent = '# Netscape HTTP Cookie File\n';
+        cookies.forEach(c => {
+          const domain = c.domain.startsWith('.') ? c.domain : '.' + c.domain;
+          const flag = c.domain.startsWith('.') ? 'TRUE' : 'FALSE';
+          const secure = c.secure ? 'TRUE' : 'FALSE';
+          const expiry = Math.round(c.expirationDate || 0);
+          cookieContent += `${domain}\t${flag}\t${c.path}\t${secure}\t${expiry}\t${c.name}\t${c.value}\n`;
+        });
+      } else {
+        cookieContent = raw;
+      }
+      fs.writeFileSync(COOKIES_FILE, cookieContent);
+      console.log('✅ YouTube cookies written and converted to Netscape format');
+    } catch(e) {
+      console.error('❌ Cookie conversion failed:', e.message);
+    }
   }
 
   // Always re-download yt-dlp standalone binary (has Python built in — fixes bot detection)
