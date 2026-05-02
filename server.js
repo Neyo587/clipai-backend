@@ -149,18 +149,17 @@ app.post('/api/info', (req, res) => {
 
 app.get('/api/test-yt', (req, res) => {
   const testUrl = 'https://www.youtube.com/watch?v=jNQXAC9IVRw';
-  const clients = ['android_embedded', 'ios', 'android', 'web', 'mweb', 'tv_embedded'];
-  const results = [];
-  let done = 0;
-
-  clients.forEach(client => {
-    const cmd = `"${YTDLP}" --extractor-args "youtube:player_client=${client}" --no-warnings --print "%(title)s" "${testUrl}"`;
-    exec(cmd, { timeout: 30000 }, (err, stdout, stderr) => {
-      results.push({ client, success: !err && !!stdout.trim(), output: stdout.trim() || stderr.substring(0, 100) });
-      done++;
-      if (done === clients.length) {
-        res.json(results);
-      }
+  const proxy = process.env.PROXY_URL || 'NO PROXY SET';
+  const cmd = `"${YTDLP}" --proxy "${process.env.PROXY_URL || ''}" --extractor-args "youtube:player_client=android" --no-warnings --print "%(title)s" "${testUrl}"`;
+  
+  exec(cmd, { timeout: 30000 }, (err, stdout, stderr) => {
+    res.json({
+      proxy_configured: proxy,
+      cmd: cmd,
+      success: !err && !!stdout.trim(),
+      stdout: stdout.trim(),
+      stderr: stderr.substring(0, 300),
+      error: err ? err.message : null
     });
   });
 });
