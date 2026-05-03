@@ -151,7 +151,7 @@ app.post('/api/info', (req, res) => {
   if (!url) return res.status(400).json({ message: 'No URL provided' });
   if (!fs.existsSync(YTDLP)) return res.status(503).json({ message: 'Server still starting, please wait 30 seconds and try again.' });
 
-  const cmd = `"${YTDLP}" ${ytArgs()} --no-playlist -f "bestaudio/best" --print "%(title)s|||%(duration_string)s|||%(id)s" "${url}"`;
+  const cmd = `"${YTDLP}" ${ytArgs()} --no-playlist --print "%(title)s|||%(duration_string)s|||%(id)s" "${url}"`;
   console.log('Running:', cmd);
   exec(cmd, { timeout: 60000 }, (err, stdout, stderr) => {
     console.log('stdout:', stdout, 'stderr:', stderr);
