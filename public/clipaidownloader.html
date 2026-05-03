@@ -842,24 +842,41 @@
       showStatus('Fetching video info...', 'info');
 
       try {
-        const BASE = 'https://clipai-backend-5cii.onrender.com';
+        // Step 1: Get video info using noembed (no server needed)
+        showStatus('Fetching video info...', 'info');
+        const noembedRes = await fetch(`https://noembed.com/embed?url=${encodeURIComponent(url)}`);
+        const noembedData = await noembedRes.json();
+        const title = noembedData.title || 'YouTube Video';
+        const vidMatch = url.match(/(?:v=|youtu\.be\/|shorts\/)([^&\n?#]+)/);
+        const videoId = vidMatch ? vidMatch[1] : null;
+        const thumbnail = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null;
 
-        const infoRes = await fetch(`${BASE}/api/info`, {
+        // Step 2: Get download URL from cobalt.tools (runs in user's browser using their IP)
+        showStatus('Getting download link...', 'info');
+        const cobaltRes = await fetch('https://api.cobalt.tools/', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ url })
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({
+            url: url,
+            downloadMode: selectedFormat === 'mp3' ? 'audio' : 'auto',
+            audioFormat: selectedFormat === 'mp3' ? 'mp3' : 'best',
+            videoQuality: selectedQuality === '4K' ? '2160' :
+                         selectedQuality === '1080p' ? '1080' :
+                         selectedQuality === '720p' ? '720' :
+                         selectedQuality === '480p' ? '480' : '720',
+            filenameStyle: 'basic'
+          })
         });
 
-        if (!infoRes.ok) {
-          const err = await infoRes.json().catch(() => ({}));
-          throw new Error(err.message || 'Could not fetch video info.');
+        const cobalt = await cobaltRes.json();
+        if (!cobalt || cobalt.status === 'error') {
+          throw new Error(cobalt?.error?.code || 'Download service unavailable. Please try again.');
         }
 
-        const info = await infoRes.json();
-        const params = new URLSearchParams({ url, format: selectedFormat, quality: selectedQuality });
-        const downloadUrl = `${BASE}/api/download?${params.toString()}`;
+        const downloadUrl = cobalt.url || cobalt.picker?.[0]?.url;
+        if (!downloadUrl) throw new Error('Could not get download link. Try a different video.');
 
-        showResult({ ...info, downloadUrl });
+        showResult({ title, thumbnail, duration: '', downloadUrl });
         showStatus('Ready to download!', 'success');
 
       } catch (err) {
