@@ -40,7 +40,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true }
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // ─── YouTube bot bypass args ──────────────────────────────────────────────────
-const BYPASS = `--extractor-args "youtube:player_client=android_embedded,ios,android" --no-warnings --format-sort "ext:mp4:m4a"`;
+const BYPASS = `--extractor-args "youtube:player_client=android_embedded,ios,android" --no-warnings`;
 
 function proxyArg() {
   return process.env.PROXY_URL ? `--proxy "${process.env.PROXY_URL}"` : '';
