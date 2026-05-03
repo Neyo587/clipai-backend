@@ -40,8 +40,7 @@ if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true }
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // ─── YouTube bot bypass args ──────────────────────────────────────────────────
-const BYPASS = `--extractor-args "youtube:player_client=ios,android,web" --no-warnings`;
-
+const BYPASS = `--extractor-args "youtube:skip=dash,hls;player_client=ios,web" --no-warnings`;
 function proxyArg() {
   return process.env.PROXY_URL ? `--proxy "${process.env.PROXY_URL}"` : '';
 }
@@ -151,7 +150,7 @@ app.post('/api/info', (req, res) => {
   if (!url) return res.status(400).json({ message: 'No URL provided' });
   if (!fs.existsSync(YTDLP)) return res.status(503).json({ message: 'Server still starting, please wait 30 seconds and try again.' });
 
-  const cmd = `"${YTDLP}" --cookies "/tmp/yt-cookies.txt" --proxy "${process.env.PROXY_URL || ''}" --no-playlist --print "%(title)s|||%(duration_string)s|||%(id)s" "${url}"`;
+  const cmd = `"${YTDLP}" --cookies "/tmp/yt-cookies.txt" --proxy "${process.env.PROXY_URL || ''}" --extractor-args "youtube:skip=dash,hls;player_client=ios,web" --no-playlist --print "%(title)s|||%(duration_string)s|||%(id)s" "${url}"`;
   console.log('Running:', cmd);
   exec(cmd, { timeout: 60000 }, (err, stdout, stderr) => {
     console.log('stdout:', stdout, 'stderr:', stderr);
