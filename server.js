@@ -72,12 +72,53 @@ function describeProxyProblem(stderr) {
   return '';
 }
 
+function describeCookieProblem(stderr) {
+  const text = String(stderr || '');
+  if (/Sign in to confirm.*not a bot|Use --cookies-from-browser|Use --cookies|authentication/i.test(text)) {
+    return 'YouTube is asking this Render server to prove it is not a bot. Add fresh YouTube cookies in Render as YT_COOKIES_B64 or YT_COOKIES, then redeploy.';
+  }
+  return '';
+}
+
 function compactProcessError(stderr, fallback) {
   const proxyProblem = describeProxyProblem(stderr);
   if (proxyProblem) return proxyProblem;
+  const cookieProblem = describeCookieProblem(stderr);
+  if (cookieProblem) return cookieProblem;
   const lines = String(stderr || '').split('\n').map(line => line.trim()).filter(Boolean);
   const important = lines.filter(line => /error|failed|unable|forbidden|sign in|confirm|private|copyright/i.test(line));
   return (important.length ? important.join(' | ') : lines.slice(-4).join(' | ') || fallback).slice(0, 700);
+}
+
+function normalizeCookieContent(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  if (text.startsWith('[')) {
+    const cookies = JSON.parse(text);
+    let cookieContent = '# Netscape HTTP Cookie File\n';
+    cookies.forEach(c => {
+      const domain = c.domain && c.domain.startsWith('.') ? c.domain : '.' + c.domain;
+      const flag = c.domain && c.domain.startsWith('.') ? 'TRUE' : 'FALSE';
+      const secure = c.secure ? 'TRUE' : 'FALSE';
+      const expiry = Math.round(c.expirationDate || c.expiration_date || c.expires || 0);
+      cookieContent += `${domain}\t${flag}\t${c.path || '/'}\t${secure}\t${expiry}\t${c.name}\t${c.value}\n`;
+    });
+    return cookieContent;
+  }
+  return text.replace(/\\n/g, '\n');
+}
+
+function writeYoutubeCookiesFromEnv() {
+  const raw =
+    process.env.YT_COOKIES_B64
+      ? Buffer.from(process.env.YT_COOKIES_B64.trim(), 'base64').toString('utf8')
+      : (process.env.YT_COOKIES || process.env.YOUTUBE_COOKIES || '');
+
+  if (!raw) return false;
+  const cookieContent = normalizeCookieContent(raw);
+  if (!cookieContent.trim()) return false;
+  fs.writeFileSync(COOKIES_FILE, cookieContent);
+  return true;
 }
 
 function publicBaseUrl(req) {
@@ -116,26 +157,14 @@ function downloadFile(url, dest, callback) {
 function setup(callback) {
   callback();
 
-  if (process.env.YT_COOKIES) {
-    try {
-      const raw = process.env.YT_COOKIES.trim();
-      let cookieContent = raw;
-      if (raw.startsWith('[')) {
-        const cookies = JSON.parse(raw);
-        cookieContent = '# Netscape HTTP Cookie File\n';
-        cookies.forEach(c => {
-          const domain = c.domain.startsWith('.') ? c.domain : '.' + c.domain;
-          const flag = c.domain.startsWith('.') ? 'TRUE' : 'FALSE';
-          const secure = c.secure ? 'TRUE' : 'FALSE';
-          const expiry = Math.round(c.expirationDate || 0);
-          cookieContent += `${domain}\t${flag}\t${c.path}\t${secure}\t${expiry}\t${c.name}\t${c.value}\n`;
-        });
-      }
-      fs.writeFileSync(COOKIES_FILE, cookieContent);
+  try {
+    if (writeYoutubeCookiesFromEnv()) {
       console.log('YouTube cookies written');
-    } catch (e) {
-      console.error('Cookie conversion failed:', e.message);
+    } else {
+      console.log('No YouTube cookies configured');
     }
+  } catch (e) {
+    console.error('Cookie conversion failed:', e.message);
   }
 
   if (fs.existsSync(YTDLP)) {
@@ -247,6 +276,176 @@ function runYtDlp(args, options = {}) {
   });
 }
 
+function runFfmpeg(args, options = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(FFMPEG, args, {
+      timeout: options.timeout || 900000,
+      maxBuffer: options.maxBuffer || 1024 * 1024 * 120
+    }, (err, stdout, stderr) => {
+      if (err) {
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+  });
+}
+
+function parseDurationFromFfmpeg(stderr) {
+  const match = String(stderr || '').match(/Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)/);
+  if (!match) return 0;
+  return Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+}
+
+async function probeMediaDuration(filePath) {
+  try {
+    await runFfmpeg(['-hide_banner', '-i', filePath], { timeout: 30000, maxBuffer: 1024 * 1024 * 5 });
+    return 0;
+  } catch (err) {
+    return parseDurationFromFfmpeg(err.stderr);
+  }
+}
+
+function pickCompilationStart(duration, segmentDuration, style) {
+  const maxStart = Math.max(0, duration - segmentDuration - 2);
+  const ratios = {
+    funniest: 0.25,
+    controversial: 0.18,
+    educational: 0.10,
+    motivational: 0.35,
+    documentary: 0.04
+  };
+  const ratio = ratios[style] === undefined ? 0.15 : ratios[style];
+  return Math.max(0, Math.min(maxStart, Math.round(duration * ratio)));
+}
+
+function concatListLine(filePath) {
+  return `file '${String(filePath).replace(/\\/g, '/').replace(/'/g, "'\\''")}'`;
+}
+
+const compilationJobs = new Map();
+
+function updateCompilationJob(jobId, patch) {
+  const job = compilationJobs.get(jobId);
+  if (!job) return;
+  Object.assign(job, patch, { updatedAt: Date.now() });
+}
+
+async function processCompilationJob(jobId) {
+  const job = compilationJobs.get(jobId);
+  if (!job) return;
+  const tempPaths = [];
+
+  try {
+    updateCompilationJob(jobId, { status: 'running', phase: 'Preparing renderer', progress: 3 });
+
+    const readyYt = await waitForFile(YTDLP);
+    const readyFfmpeg = await waitForFile(FFMPEG);
+    if (!readyYt || !readyFfmpeg) throw new Error('Downloader is still starting. Try again in a minute.');
+
+    const sourcePaths = [];
+    const segmentPaths = [];
+    const targetSeconds = Math.max(120, Math.min(45 * 60, Number(job.targetMinutes || 10) * 60));
+    const perSourceTarget = Math.max(20, Math.min(10 * 60, Math.round(targetSeconds / job.links.length)));
+
+    for (let i = 0; i < job.links.length; i++) {
+      const link = job.links[i];
+      const sourcePath = path.join(UPLOAD_DIR, `${jobId}_source_${i}.mp4`);
+      sourcePaths.push(sourcePath);
+      tempPaths.push(sourcePath);
+      updateCompilationJob(jobId, {
+        phase: `Downloading source ${i + 1} of ${job.links.length}`,
+        progress: Math.round(5 + (i / job.links.length) * 35)
+      });
+
+      const args = ytArgList([
+        '--ffmpeg-location', FFMPEG,
+        '-f', 'bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best[ext=mp4]/best',
+        '--merge-output-format', 'mp4',
+        '-o', sourcePath,
+        link
+      ]);
+      await runYtDlp(args, { timeout: 900000, maxBuffer: 1024 * 1024 * 220 });
+      if (!fs.existsSync(sourcePath)) throw new Error(`Source ${i + 1} could not be downloaded.`);
+    }
+
+    for (let i = 0; i < sourcePaths.length; i++) {
+      const sourcePath = sourcePaths[i];
+      updateCompilationJob(jobId, {
+        phase: `Cutting segment ${i + 1} of ${sourcePaths.length}`,
+        progress: Math.round(45 + (i / sourcePaths.length) * 35)
+      });
+
+      const duration = await probeMediaDuration(sourcePath);
+      const segmentDuration = duration ? Math.min(perSourceTarget, Math.max(15, duration - 2)) : perSourceTarget;
+      const start = duration ? pickCompilationStart(duration, segmentDuration, job.style) : 0;
+      const segmentPath = path.join(DOWNLOAD_DIR, `${jobId}_segment_${i}.mp4`);
+      segmentPaths.push(segmentPath);
+      tempPaths.push(segmentPath);
+
+      await runFfmpeg([
+        '-y',
+        '-ss', String(start),
+        '-t', String(segmentDuration),
+        '-i', sourcePath,
+        '-vf', 'scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black,setsar=1',
+        '-r', '30',
+        '-c:v', 'libx264',
+        '-preset', 'veryfast',
+        '-crf', '28',
+        '-c:a', 'aac',
+        '-b:a', '128k',
+        '-ac', '2',
+        '-movflags', '+faststart',
+        '-threads', '1',
+        segmentPath
+      ], { timeout: 900000, maxBuffer: 1024 * 1024 * 200 });
+    }
+
+    updateCompilationJob(jobId, { phase: 'Joining final compilation', progress: 86 });
+    const listPath = path.join(DOWNLOAD_DIR, `${jobId}_concat.txt`);
+    fs.writeFileSync(listPath, segmentPaths.map(concatListLine).join('\n'), 'utf8');
+    tempPaths.push(listPath);
+
+    const outputPath = path.join(DOWNLOAD_DIR, `${jobId}_compilation.mp4`);
+    await runFfmpeg([
+      '-y',
+      '-f', 'concat',
+      '-safe', '0',
+      '-i', listPath,
+      '-c', 'copy',
+      '-movflags', '+faststart',
+      outputPath
+    ], { timeout: 900000, maxBuffer: 1024 * 1024 * 200 });
+
+    if (!fs.existsSync(outputPath)) throw new Error('Final compilation was not created.');
+    const stat = fs.statSync(outputPath);
+    updateCompilationJob(jobId, {
+      status: 'completed',
+      phase: 'Ready to download',
+      progress: 100,
+      outputPath,
+      size: stat.size,
+      downloadUrl: `/api/compilation/download/${jobId}`
+    });
+
+    tempPaths
+      .filter(p => p !== outputPath)
+      .forEach(p => { try { fs.unlinkSync(p); } catch (e) {} });
+  } catch (err) {
+    const stderr = err.stderr || '';
+    updateCompilationJob(jobId, {
+      status: 'failed',
+      phase: 'Failed',
+      progress: 100,
+      error: compactProcessError(stderr, err.message)
+    });
+    tempPaths.forEach(p => { try { fs.unlinkSync(p); } catch (e) {} });
+  }
+}
+
 app.post('/api/info', async (req, res) => {
   const { url } = req.body || {};
   if (!url) return res.status(400).json({ message: 'No URL provided' });
@@ -280,6 +479,7 @@ app.get('/api/test-yt', async (req, res) => {
     const { stdout, stderr } = await runYtDlp(args, { timeout: 30000 });
     res.json({
       proxy_configured: getProxyUrl() ? 'YES' : 'NO',
+      cookies_configured: fs.existsSync(COOKIES_FILE) ? 'YES' : 'NO',
       success: !!stdout.trim(),
       stdout: stdout.trim(),
       stderr: stderr.substring(0, 300),
@@ -288,6 +488,7 @@ app.get('/api/test-yt', async (req, res) => {
   } catch (err) {
     res.json({
       proxy_configured: getProxyUrl() ? 'YES' : 'NO',
+      cookies_configured: fs.existsSync(COOKIES_FILE) ? 'YES' : 'NO',
       success: false,
       stdout: String(err.stdout || '').trim(),
       stderr: String(err.stderr || '').substring(0, 500),
@@ -381,6 +582,65 @@ app.post('/api/youtube-upload', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: `YouTube download failed: ${compactProcessError(err.stderr, err.message)}` });
   }
+});
+
+app.post('/api/compilation/start', async (req, res) => {
+  const body = req.body || {};
+  const links = Array.isArray(body.links)
+    ? body.links.map(link => String(link || '').trim()).filter(Boolean).filter((link, index, arr) => arr.indexOf(link) === index)
+    : [];
+  if (links.length < 2) return res.status(400).json({ error: 'At least two YouTube links are required.' });
+  if (links.length > 8) return res.status(400).json({ error: 'Use 2 to 8 links for this first renderer version.' });
+  const invalid = links.filter(link => !/^https?:\/\/(www\.)?(youtube\.com|youtu\.be|m\.youtube\.com)\//i.test(link));
+  if (invalid.length) return res.status(400).json({ error: 'Only YouTube links are supported right now.' });
+
+  const jobId = `comp_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  const job = {
+    id: jobId,
+    status: 'queued',
+    phase: 'Queued',
+    progress: 0,
+    links,
+    style: String(body.style || 'funniest'),
+    targetMinutes: Math.max(2, Math.min(45, Number(body.targetMinutes) || 10)),
+    brief: String(body.brief || '').slice(0, 500),
+    plan: body.plan || null,
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  };
+  compilationJobs.set(jobId, job);
+  setTimeout(() => processCompilationJob(jobId), 50);
+
+  res.status(202).json({
+    jobId,
+    status: job.status,
+    phase: job.phase,
+    progress: job.progress,
+    statusUrl: `${publicBaseUrl(req)}/api/compilation/status/${jobId}`
+  });
+});
+
+app.get('/api/compilation/status/:id', (req, res) => {
+  const job = compilationJobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Compilation job not found. Jobs are temporary, so start a new build if the server restarted.' });
+  res.json({
+    id: job.id,
+    status: job.status,
+    phase: job.phase,
+    progress: job.progress,
+    error: job.error || null,
+    size: job.size || 0,
+    downloadUrl: job.status === 'completed' ? `${publicBaseUrl(req)}/api/compilation/download/${job.id}` : null,
+    createdAt: job.createdAt,
+    updatedAt: job.updatedAt
+  });
+});
+
+app.get('/api/compilation/download/:id', (req, res) => {
+  const job = compilationJobs.get(req.params.id);
+  if (!job || job.status !== 'completed' || !job.outputPath) return res.status(404).json({ error: 'Compilation is not ready.' });
+  res.setHeader('Content-Disposition', 'attachment; filename="clipai-compilation.mp4"');
+  streamVideoFile(req, res, job.outputPath);
 });
 
 app.get('/api/serve-upload/:id', (req, res) => {
