@@ -385,11 +385,32 @@
           throw new Error('API error: ' + formatsData.message);
         }
 
-        let downloadUrl = formatsData?.url || formatsData?.link || formatsData?.downloadUrl ||
-          (Array.isArray(formatsData) ? formatsData[0]?.url : null);
+        // Extract download URL from any possible field in response
+        let downloadUrl = formatsData?.url || 
+                         formatsData?.link || 
+                         formatsData?.downloadUrl ||
+                         formatsData?.download_url ||
+                         formatsData?.src ||
+                         formatsData?.file ||
+                         (Array.isArray(formatsData) ? formatsData[0]?.url : null);
+
+        // Some APIs return the URL inside a nested object
+        if (!downloadUrl && formatsData) {
+          const keys = Object.keys(formatsData);
+          for (const key of keys) {
+            const val = formatsData[key];
+            if (typeof val === 'string' && (val.startsWith('http') || val.startsWith('https'))) {
+              downloadUrl = val;
+              break;
+            }
+          }
+        }
+
+        console.log('Full response keys:', Object.keys(formatsData || {}));
+        console.log('Extracted downloadUrl:', downloadUrl);
 
         if (!downloadUrl) {
-          throw new Error('Could not get download link. Try a different video.');
+          throw new Error('Could not get download link. Full response: ' + JSON.stringify(formatsData).substring(0, 200));
         }
 
         animateProgress(100);
