@@ -343,7 +343,7 @@
       }
 
       try {
-        // Step 1: Get video info from noembed (free, no API key needed)
+        // Step 1: Get video info
         showStatus('Fetching video info...', 'info');
         let title = 'YouTube Video';
         try {
@@ -354,87 +354,54 @@
 
         const thumbnail = videoId ? `https://img.youtube.com/vi/${videoId}/mqdefault.jpg` : null;
 
-        // Step 2: Try multiple free download services
+        // Step 2: Get download URL via RapidAPI
         showStatus('Getting download link...', 'info');
-        animateProgress(85);
+        animateProgress(50);
+
+        const RAPIDAPI_KEY = '2739c1edfcmsh6e763515222fb6bp1b7684jsne1a821094a00';
+        const RAPIDAPI_HOST = 'youtube-video-fast-downloader-24-7.p.rapidapi.com';
+
+        // First get available formats for this video
+        const formatsRes = await fetch(`https://${RAPIDAPI_HOST}/download_video/${videoId}?quality=18`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-rapidapi-host': RAPIDAPI_HOST,
+            'x-rapidapi-key': RAPIDAPI_KEY
+          }
+        });
+
+        const formatsData = await formatsRes.json();
+        console.log('RapidAPI response:', formatsData);
 
         let downloadUrl = null;
 
-        // Service 1: yt1s API (widely used, reliable)
-        if (!downloadUrl) {
-          try {
-            const res1 = await fetch('https://yt1s.com/api/ajaxSearch', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: new URLSearchParams({ q: url, vt: selectedFormat === 'mp3' ? 'mp3' : 'mp4' })
-            });
-            const d1 = await res1.json();
-            if (d1?.status === 'Ok') {
-              const links = selectedFormat === 'mp3' ? d1?.links?.mp3 : d1?.links?.mp4;
-              const quality = selectedFormat === 'mp3' ? '128' : '720';
-              if (links?.[quality]?.k) {
-                const res2 = await fetch('https://yt1s.com/api/ajaxConvert', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                  body: new URLSearchParams({ vid: d1.vid, k: links[quality].k })
-                });
-                const d2 = await res2.json();
-                if (d2?.dlink) downloadUrl = d2.dlink;
-              }
-            }
-          } catch(e) {}
-        }
-
-        // Service 2: loader.to API
-        if (!downloadUrl) {
-          try {
-            const format = selectedFormat === 'mp3' ? 'mp3' : 'mp4';
-            const res = await fetch(`https://loader.to/ajax/download.php?format=${format}&url=${encodeURIComponent(url)}`);
-            const d = await res.json();
-            if (d?.success && d?.id) {
-              // Poll for completion
-              for (let i = 0; i < 20; i++) {
-                await new Promise(r => setTimeout(r, 3000));
-                const poll = await fetch(`https://loader.to/ajax/progress.php?id=${d.id}`);
-                const p = await poll.json();
-                if (p?.download_url) { downloadUrl = p.download_url; break; }
-                if (p?.success === 2) break;
-              }
-            }
-          } catch(e) {}
-        }
-
-        // Service 3: y2mate API
-        if (!downloadUrl) {
-          try {
-            const res1 = await fetch('https://www.y2mate.com/mates/analyzeV2/ajax', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: new URLSearchParams({ k_query: url, k_page: 'home', hl: 'en', q_auto: 0 })
-            });
-            const d1 = await res1.json();
-            if (d1?.vid) {
-              const links = selectedFormat === 'mp3' ? d1?.links?.mp3 : d1?.links?.mp4;
-              const key = Object.keys(links || {})[0];
-              if (links?.[key]?.k) {
-                const res2 = await fetch('https://www.y2mate.com/mates/convertV2/index', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                  body: new URLSearchParams({ vid: d1.vid, k: links[key].k })
-                });
-                const d2 = await res2.json();
-                if (d2?.dlink) downloadUrl = d2.dlink;
-              }
-            }
-          } catch(e) {}
+        if (formatsData?.url) {
+          downloadUrl = formatsData.url;
+        } else if (formatsData?.link) {
+          downloadUrl = formatsData.link;
+        } else if (Array.isArray(formatsData)) {
+          // Pick best quality based on format selection
+          if (selectedFormat === 'mp3') {
+            const audio = formatsData.find(f => f.mimeType?.includes('audio') || f.quality?.includes('audio'));
+            downloadUrl = audio?.url || formatsData[0]?.url;
+          } else {
+            const qualityMap = { '480p': '480', '720p': '720', '1080p': '1080', '4K': '2160' };
+            const targetQ = qualityMap[selectedQuality] || '720';
+            const video = formatsData.find(f => f.quality?.includes(targetQ)) || 
+                         formatsData.find(f => f.quality?.includes('720')) ||
+                         formatsData[0];
+            downloadUrl = video?.url;
+          }
         }
 
         if (!downloadUrl) {
-          throw new Error('Download services are currently unavailable. Please try again in a few minutes.');
+          throw new Error('Could not get download link. Try a different video.');
         }
 
+        animateProgress(100);
         const result = { title, thumbnail, downloadUrl };
-        cache[cacheKey] = result; // cache for repeated requests
+        cache[cacheKey] = result;
         showResult(result);
         showStatus('Ready to download!', 'success');
 
