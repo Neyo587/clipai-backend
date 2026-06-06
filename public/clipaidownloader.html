@@ -361,8 +361,15 @@
         const RAPIDAPI_KEY = '2739c1edfcmsh6e763515222fb6bp1b7684jsne1a821094a00';
         const RAPIDAPI_HOST = 'youtube-video-fast-downloader-24-7.p.rapidapi.com';
 
-        // First get available formats for this video
-        const formatsRes = await fetch(`https://${RAPIDAPI_HOST}/download_video/${videoId}?quality=18`, {
+        // Use correct endpoint based on format
+        const qualityMap = { '128 kbps': '140', '192 kbps': '140', '256 kbps': '140', '320 kbps': '140', '480p': '135', '720p': '247', '1080p': '137', '4K': '313' };
+        const qualityCode = qualityMap[selectedQuality] || (selectedFormat === 'mp3' ? '140' : '247');
+        const endpoint = selectedFormat === 'mp3' ? 'download_audio' : 'download_video';
+
+        const apiUrl = `https://${RAPIDAPI_HOST}/${endpoint}/${videoId}?quality=${qualityCode}`;
+        console.log('Calling:', apiUrl);
+
+        const formatsRes = await fetch(apiUrl, {
           method: 'GET',
           headers: {
             'Content-Type': 'application/json',
@@ -374,26 +381,12 @@
         const formatsData = await formatsRes.json();
         console.log('RapidAPI response:', formatsData);
 
-        let downloadUrl = null;
-
-        if (formatsData?.url) {
-          downloadUrl = formatsData.url;
-        } else if (formatsData?.link) {
-          downloadUrl = formatsData.link;
-        } else if (Array.isArray(formatsData)) {
-          // Pick best quality based on format selection
-          if (selectedFormat === 'mp3') {
-            const audio = formatsData.find(f => f.mimeType?.includes('audio') || f.quality?.includes('audio'));
-            downloadUrl = audio?.url || formatsData[0]?.url;
-          } else {
-            const qualityMap = { '480p': '480', '720p': '720', '1080p': '1080', '4K': '2160' };
-            const targetQ = qualityMap[selectedQuality] || '720';
-            const video = formatsData.find(f => f.quality?.includes(targetQ)) || 
-                         formatsData.find(f => f.quality?.includes('720')) ||
-                         formatsData[0];
-            downloadUrl = video?.url;
-          }
+        if (formatsData?.message) {
+          throw new Error('API error: ' + formatsData.message);
         }
+
+        let downloadUrl = formatsData?.url || formatsData?.link || formatsData?.downloadUrl ||
+          (Array.isArray(formatsData) ? formatsData[0]?.url : null);
 
         if (!downloadUrl) {
           throw new Error('Could not get download link. Try a different video.');
